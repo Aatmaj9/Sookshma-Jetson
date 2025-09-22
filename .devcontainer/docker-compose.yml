@@ -1,0 +1,29 @@
+services:
+  sookshma:
+    image: aatmaj9/sookshma:8.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sookshma_dev
+    working_dir: /workspaces/mavlab
+    user: "mavlab"
+
+    volumes:
+      - ..:/workspaces/mavlab
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - /dev:/dev
+      - /dev/bus/usb:/dev/bus/usb              
+
+    group_add:
+      - dialout
+    device_cgroup_rules:
+      - 'c 166:* rmw'   # ttyACM*
+      - 'c 188:* rmw'   # ttyUSB*
+
+    privileged: true
+    network_mode: host
+    shm_size: "2g"
+    stdin_open: true
+    tty: true
+    environment:
+      - DISPLAY=${DISPLAY}
