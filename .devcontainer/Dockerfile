@@ -1,7 +1,7 @@
 # JP6.2 (L4T r36.4) + ZED SDK 5.0 + dev tools
 FROM stereolabs/zed:5.0-tools-devel-l4t-r36.4
 
-# ----------------------------------------------ROS 2 Humble apt repo & base packages -----------------------------------------
+# ---------------------------------------------- ROS 2 Humble apt repo & base packages -----------------------------------------
 RUN apt-get update && apt-get install -y curl gnupg2 lsb-release \
  && curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
     | gpg --dearmor -o /usr/share/keyrings/ros-archive-keyring.gpg \
@@ -11,9 +11,12 @@ RUN apt-get update && apt-get install -y curl gnupg2 lsb-release \
  && apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ros-humble-ros-base \
-      ros-humble-colcon-common-extensions \
-      python3-rosdep python3-rosinstall-generator python3-vcstool python3-rosinstall build-essential \
- && rosdep init || true && rosdep update \
+      python3-rosdep \
+      python3-vcstool \
+      python3-colcon-common-extensions \
+      build-essential \
+ && rosdep init || true \
+ && rosdep update \
  && rm -rf /var/lib/apt/lists/*
 
 
@@ -33,6 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-humble-diagnostic-updater \
       ros-humble-nmea-msgs \
       ros-humble-rtcm-msgs \
+      ros-humble-rviz2 \
       ros-humble-rosbridge-server \
       ros-humble-image-transport-plugins \
       ros-humble-compressed-image-transport \
@@ -68,25 +72,25 @@ ENV USERNAME=${USERNAME}
 RUN useradd -m "${USERNAME}" \
     && echo "${USERNAME}:${USERNAME}" | chpasswd \
     && usermod --shell /bin/bash "${USERNAME}" \
-    && usermod -aG sudo,dialout "${USERNAME}" \
-    && usermod -aG video,plugdev,dialout "${USERNAME}" \
+    && usermod -aG sudo,dialout,video,plugdev "${USERNAME}" \
     && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} \
     && chmod 0440 /etc/sudoers.d/${USERNAME}
+
+#---------------------------------------------------------------------------------Python Dependencies and  Arduino CLI---------------------------------------------------------------------
 
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
-#-----------------------------------------------------------------------------------ZED-ROS2-WRAPPER---------------------------------------------------------------------------
-
-RUN cd /home/${USERNAME}/ros2_ws/src \
- && git clone --depth=1 https://github.com/stereolabs/zed-ros2-wrapper.git 
-
-#---------------------------------------------------------------------------------Python Dependencies and  Arduino CLI---------------------------------------------------------------------
-
 # --- Python deps from requirements.txt -----
+RUN python3 -m venv /home/${USERNAME}/.venv
+ENV VIRTUAL_ENV=/home/${USERNAME}/.venv
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Install your Python deps into the venv
 COPY --chown=${USERNAME}:${USERNAME} requirements.txt /home/${USERNAME}/requirements.txt
-RUN pip install --user -r /home/${USERNAME}/requirements.txt
-ENV PATH="/home/${USERNAME}/.local/bin:${PATH}"
+RUN python3 -m pip install --upgrade pip \
+ && python3 -m pip install --no-cache-dir -r /home/${USERNAME}/requirements.txt
+RUN echo 'source $VIRTUAL_ENV/bin/activate' >> ~/.bashrc
 
 # --- Arduino CLI Setup---
 RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
