@@ -1,0 +1,20 @@
+[0.013s] Invoking command in '/home/aatmaj/Sookshma/ros2_ws/build/zed_components': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/aatmaj/Sookshma/ros2_ws/install/uwb_driver:/home/aatmaj/Sookshma/ros2_ws/install/mav_simulator:/home/aatmaj/Sookshma/ros2_ws/install/gnc:/opt/ros/humble /usr/bin/cmake /home/aatmaj/Sookshma/ros2_ws/src/zed-ros2-wrapper/zed_components -DCMAKE_BUILD_TYPE=Release -DAMENT_CMAKE_SYMLINK_INSTALL=1 -DCMAKE_INSTALL_PREFIX=/home/aatmaj/Sookshma/ros2_ws/install/zed_components
+[0.047s] [31mCMake Error at CMakeLists.txt:84 (find_package):
+[0.047s]   By not providing "FindZED.cmake" in CMAKE_MODULE_PATH this project has
+[0.047s]   asked CMake to find a package configuration file provided by "ZED", but
+[0.047s]   CMake did not find one.
+[0.047s] 
+[0.047s]   Could not find a package configuration file provided by "ZED" with any of
+[0.047s]   the following names:
+[0.047s] 
+[0.048s]     ZEDConfig.cmake
+[0.048s]     zed-config.cmake
+[0.048s] 
+[0.048s]   Add the installation prefix of "ZED" to CMAKE_PREFIX_PATH or set "ZED_DIR"
+[0.048s]   to a directory containing one of the above files.  If "ZED" provides a
+[0.048s]   separate development package or SDK, be sure it has been installed.
+[0.048s] 
+[0.048s] [0m
+[0.048s] -- Configuring incomplete, errors occurred!
+[0.048s] See also "/home/aatmaj/Sookshma/ros2_ws/build/zed_components/CMakeFiles/CMakeOutput.log".
+[0.050s] Invoked command in '/home/aatmaj/Sookshma/ros2_ws/build/zed_components' returned '1': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/aatmaj/Sookshma/ros2_ws/install/uwb_driver:/home/aatmaj/Sookshma/ros2_ws/install/mav_simulator:/home/aatmaj/Sookshma/ros2_ws/install/gnc:/opt/ros/humble /usr/bin/cmake /home/aatmaj/Sookshma/ros2_ws/src/zed-ros2-wrapper/zed_components -DCMAKE_BUILD_TYPE=Release -DAMENT_CMAKE_SYMLINK_INSTALL=1 -DCMAKE_INSTALL_PREFIX=/home/aatmaj/Sookshma/ros2_ws/install/zed_components
