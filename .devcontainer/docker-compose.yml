@@ -1,6 +1,6 @@
 services:
   sookshma:
-    image: aatmaj9/sookshma:8.0
+    image: aatmaj9/sookshma-jetson:1.0
     build:
       context: .
       dockerfile: Dockerfile
@@ -12,10 +12,15 @@ services:
       - ..:/workspaces/mavlab
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
       - /dev:/dev
-      - /dev/bus/usb:/dev/bus/usb              
-
+      - /dev/bus/usb:/dev/bus/usb
+      - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1      
+              
+    runtime: nvidia
     group_add:
       - dialout
+      - video
+      - plugdev
     device_cgroup_rules:
       - 'c 166:* rmw'   # ttyACM*
       - 'c 188:* rmw'   # ttyUSB*
@@ -27,3 +32,6 @@ services:
     tty: true
     environment:
       - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all

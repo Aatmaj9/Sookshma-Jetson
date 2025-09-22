@@ -1,21 +1,35 @@
-# Base: Ubuntu 22.04 + ROS Humble
-FROM ros:humble
+# JP6.2 (L4T r36.4) + ZED SDK 5.0 + dev tools
+FROM stereolabs/zed:5.0-tools-devel-l4t-r36.4
+
+# ----------------------------------------------ROS 2 Humble apt repo & base packages -----------------------------------------
+RUN apt-get update && apt-get install -y curl gnupg2 lsb-release \
+ && curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+    | gpg --dearmor -o /usr/share/keyrings/ros-archive-keyring.gpg \
+ && echo "deb [signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
+    http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" \
+    > /etc/apt/sources.list.d/ros2.list \
+ && apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      ros-humble-ros-base \
+      ros-humble-colcon-common-extensions \
+      python3-rosdep python3-vcstool \
+ && rosdep init || true && rosdep update \
+ && rm -rf /var/lib/apt/lists/*
+
 
 RUN apt-get update
 RUN apt-get -y install software-properties-common
 RUN add-apt-repository universe
 RUN apt-get update
-RUN apt-get -y install python3-pip python3-serial
+RUN apt-get -y install python3-pip python3-serial python3-venv 
 RUN apt-get -y install sudo xauth htop udev zip unzip curl
 RUN apt-get update --fix-missing
 RUN apt-get -y install libboost-all-dev libasio-dev 
 
-# --- System deps & ROS 2 packages in one layer ---
+# ------------------------------------------ System deps & ROS 2 packages in one layer ------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential gcc gfortran git \
-      python3-pip python3-serial python3-venv \
-      libsm6 libxext6 libxrender1 libfontconfig1 libgl1 libboost-all-dev libasio-dev \
-      gdebi-core \
+      libsm6 libxext6 libxrender1 libfontconfig1 libgl1 libboost-all-dev libasio-dev gdebi-core \
       ros-humble-diagnostic-updater \
       ros-humble-nmea-msgs \
       ros-humble-rtcm-msgs \
@@ -40,13 +54,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
-# --- arm64-only: system toolchain/uploader (Due needs bossac) ---
-ARG TARGETARCH
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-      apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi bossa-cli && \
-      rm -rf /var/lib/apt/lists/*; \
-    fi
+      rm -rf /var/lib/apt/lists/*
     
 #-----------------------------------------------------------------------------------All basic installations is done---------------------------------------------------------------------------
 
@@ -78,69 +88,29 @@ RUN arduino-cli config init \
  && arduino-cli config set directories.data "${ARDUINO_DATA}"
 RUN arduino-cli core update-index && arduino-cli cache clean
 
-# ----------------------------------------------------------------------------------Arduino Installations on AMD ----------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------Arduino Installations ----------------------------------------------------------------------------------
 
-# This RUN block only executes if the target architecture is 'AMD64'
-ARG TARGETARCH
-RUN if [ "$TARGETARCH" = "amd64" ]; then \
-        echo "--- Executing AMD-specific Arduino setup ---" && \
-        # Install the standard Arduino SAM core
-        arduino-cli core update-index && \
-        arduino-cli cache clean && \
-        arduino-cli core install arduino:sam@1.6.12 && \
-        # Define a shell variable for the path
-        SAM_AMD_PATH="/home/${USERNAME}/.arduino15/packages/arduino/hardware/sam/1.6.12" && \
-        # Patch the platform.txt file
-        curl -fsSL https://raw.githubusercontent.com/micro-ROS/micro_ros_arduino/main/extras/patching_boards/platform_arduinocore_sam.txt -o ${SAM_AMD_PATH}/platform.txt && \
-        # Install libraries
-        arduino-cli lib install Servo && \
-        git clone --depth=1 https://gitlab.com/timwilkinson/FlySkyIBus.git /home/${USERNAME}/Arduino/libraries/FlySkyIBus; \
-    fi
-
-COPY --chown=${USERNAME}:${USERNAME} micro_ros_arduino_amd.zip /tmp/micro_ros_arduino.zip
-
-#Install the pre-built custom micro_ros_arduino for AMD
-RUN if [ "$TARGETARCH" = "amd64" ]; then \
-        echo "--- Executing AMD-specific user setup ---" && \
-        # Create arduino-cli config
-        printf "board_manager:\n  additional_urls: []\n\nlibrary:\n  enable_unsafe_install: true\n" > /home/${USERNAME}/.arduino15/arduino-cli.yaml && \
-        # Install the zipped micro-ROS library
-        arduino-cli --config-file /home/${USERNAME}/.arduino15/arduino-cli.yaml lib install --zip-path /tmp/micro_ros_arduino.zip && \
-        rm /tmp/micro_ros_arduino.zip; \
-    fi
-# -----------------------------------------------------------------------------------Arduino Installations on ARM----------------------------------------------------------------------------------
-
-# This RUN block only executes if the target architecture is 'ARM64'
-ARG TARGETARCH
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-        echo "--- Executing ARM-specific Arduino setup ---" && \
-        # Install and configure the core
-        arduino-cli core update-index && \
-        arduino-cli cache clean && \
-        arduino-cli core update-index --additional-urls https://per1234.github.io/ArduinoCore-sam/package_per1234_samarm64_index.json && \
-        export ARDUINO_BOARD_MANAGER_ADDITIONAL_URLS=https://per1234.github.io/ArduinoCore-sam/package_per1234_samarm64_index.json && \
-        arduino-cli core install per1234:sam && \
-        # Define a shell variable for the path
-        SAM_ARM_PATH="/home/${USERNAME}/.arduino15/packages/per1234/hardware/sam/1.6.11-arm64" && \
-        # Patch the platform.txt file
-        curl -fsSL https://raw.githubusercontent.com/micro-ROS/micro_ros_arduino/main/extras/patching_boards/platform_arduinocore_sam.txt -o ${SAM_ARM_PATH}/platform.txt && \
-        sed -i 's/-4.8.3-2014q1././g' ${SAM_ARM_PATH}/platform.txt && \
-        # Install basic libraries
-        arduino-cli lib install Servo && \
-        git clone --depth=1 https://gitlab.com/timwilkinson/FlySkyIBus.git /home/${USERNAME}/Arduino/libraries/FlySkyIBus; \
-    fi
+RUN arduino-cli core update-index && \
+    arduino-cli cache clean && \
+    arduino-cli core update-index --additional-urls https://per1234.github.io/ArduinoCore-sam/package_per1234_samarm64_index.json && \
+    export ARDUINO_BOARD_MANAGER_ADDITIONAL_URLS=https://per1234.github.io/ArduinoCore-sam/package_per1234_samarm64_index.json && \
+    arduino-cli core install per1234:sam && \
+    # Define a shell variable for the path
+    SAM_ARM_PATH="/home/${USERNAME}/.arduino15/packages/per1234/hardware/sam/1.6.11-arm64" && \
+    # Patch the platform.txt file
+    curl -fsSL https://raw.githubusercontent.com/micro-ROS/micro_ros_arduino/main/extras/patching_boards/platform_arduinocore_sam.txt -o ${SAM_ARM_PATH}/platform.txt && \
+    sed -i 's/-4.8.3-2014q1././g' ${SAM_ARM_PATH}/platform.txt && \
+    # Install basic libraries
+    arduino-cli lib install Servo && \
+    git clone --depth=1 https://gitlab.com/timwilkinson/FlySkyIBus.git /home/${USERNAME}/Arduino/libraries/FlySkyIBus
 
 COPY --chown=${USERNAME}:${USERNAME} micro_ros_arduino_arm.zip /tmp/micro_ros_arduino.zip
 
-#Install the pre-built custom micro_ros_arduino for ARM
-RUN if [ "$TARGETARCH" = "arm64" ]; then \
-        echo "--- Executing ARM-specific user setup ---" && \
-        # Create arduino-cli config
-        printf "board_manager:\n  additional_urls: []\n\nlibrary:\n  enable_unsafe_install: true\n" > /home/${USERNAME}/.arduino15/arduino-cli.yaml && \
-        # Install the zipped micro-ROS library
-        arduino-cli --config-file /home/${USERNAME}/.arduino15/arduino-cli.yaml lib install --zip-path /tmp/micro_ros_arduino.zip && \
-        rm /tmp/micro_ros_arduino.zip; \
-    fi
+
+RUN printf "board_manager:\n  additional_urls: []\n\nlibrary:\n  enable_unsafe_install: true\n" > /home/${USERNAME}/.arduino15/arduino-cli.yaml && \
+    # Install the zipped micro-ROS library
+    arduino-cli --config-file /home/${USERNAME}/.arduino15/arduino-cli.yaml lib install --zip-path /tmp/micro_ros_arduino.zip && \
+    rm /tmp/micro_ros_arduino.zip
 
 # --------------------------------------------------------------------------------------Some Other Installations--------------------------------------------------------------------------------
 
