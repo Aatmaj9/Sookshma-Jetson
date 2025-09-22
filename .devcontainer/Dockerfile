@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y curl gnupg2 lsb-release \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       ros-humble-ros-base \
       ros-humble-colcon-common-extensions \
-      python3-rosdep python3-vcstool \
+      python3-rosdep python3-rosinstall-generator python3-vcstool python3-rosinstall build-essential \
  && rosdep init || true && rosdep update \
  && rm -rf /var/lib/apt/lists/*
 
@@ -57,7 +57,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi bossa-cli && \
       rm -rf /var/lib/apt/lists/*
-    
+
+
+
 #-----------------------------------------------------------------------------------All basic installations is done---------------------------------------------------------------------------
 
 # --- Create non-root user once (sudo + dialout) ---
@@ -67,11 +69,17 @@ RUN useradd -m "${USERNAME}" \
     && echo "${USERNAME}:${USERNAME}" | chpasswd \
     && usermod --shell /bin/bash "${USERNAME}" \
     && usermod -aG sudo,dialout "${USERNAME}" \
+    && usermod -aG video,plugdev,dialout "${USERNAME}" \
     && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} \
     && chmod 0440 /etc/sudoers.d/${USERNAME}
 
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
+
+#-----------------------------------------------------------------------------------ZED-ROS2-WRAPPER---------------------------------------------------------------------------
+
+RUN cd /home/${USERNAME}/ros2_ws/src \
+ && git clone --depth=1 https://github.com/stereolabs/zed-ros2-wrapper.git 
 
 #---------------------------------------------------------------------------------Python Dependencies and  Arduino CLI---------------------------------------------------------------------
 
