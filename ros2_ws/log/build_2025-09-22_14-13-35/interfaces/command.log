@@ -1,1 +1,0 @@
-Invoking command in '/home/aatmaj/Sookshma/ros2_ws/build/interfaces': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/home/aatmaj/Sookshma/ros2_ws/install/uwb_driver:/home/aatmaj/Sookshma/ros2_ws/install/mav_simulator:/home/aatmaj/Sookshma/ros2_ws/install/gnc:/opt/ros/humble /usr/bin/cmake --build /home/aatmaj/Sookshma/ros2_ws/build/interfaces -- -j24 -l24

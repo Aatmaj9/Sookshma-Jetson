@@ -1,1 +1,0 @@
-Invoking command in '/home/aatmaj/Sookshma/ros2_ws/build/zed_components': /usr/bin/cmake /home/aatmaj/Sookshma/ros2_ws/src/zed-ros2-wrapper/zed_components -DCMAKE_BUILD_TYPE=Release -DAMENT_CMAKE_SYMLINK_INSTALL=1 -DCMAKE_INSTALL_PREFIX=/home/aatmaj/Sookshma/ros2_ws/install/zed_components
