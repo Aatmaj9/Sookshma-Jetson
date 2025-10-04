@@ -13,7 +13,7 @@
 // ================= Pins & Constants =================
 const int LEFT_THRUSTER_PIN = 12;
 const int RIGHT_THRUSTER_PIN = 13;
-const int LED_PIN = LED_BUILTIN;
+const int LED_PIN = 4;
 const int RELAY_PIN = 3;
 
 const int NEUTRAL_SIGNAL = 1500;
@@ -26,10 +26,9 @@ const int IPR_DEADBAND = 20;
 
 const int THROTTLE_CH = 1;
 const int STEERING_CH = 0;
-const int IPR_CH = 3;
 const int MODE_CH = 4;
-const int EMERGENCY_CH = 5;
-const int LIGHT_CH = 7;
+//const int EMERGENCY_CH = 5;
+//const int LIGHT_CH = 8;
 
 // ================= Globals =================
 bool autoMode = false;
@@ -48,6 +47,8 @@ int heartbeatStage = 0;
 bool relayState_rf = false;
 unsigned long lastRelayToggle_rf = 0;
 int heartbeatStage_rf = 0;
+unsigned long lastRelayToggle_auto = 0;
+int heartbeatStage_auto = 0;
 
 // ================= micro-ROS handles =================
 rcl_node_t node;
@@ -60,6 +61,10 @@ rclc_support_t support;
 interfaces__msg__Actuator last_actuator_msg;
 bool actuator_msg_received = false;
 std_msgs__msg__Bool last_heartbeat_msg;
+
+// Globals to hold safe actuator values
+double commanded_th_stbd = 0.0;
+double commanded_th_port = 0.0;
 
 // ================= micro-ROS publisher =================
 rcl_publisher_t actuator_pub;
@@ -85,10 +90,16 @@ unsigned long last_ping_ms = 0;
 
 // ================= Helper Functions =================
 bool readSwitch(byte channelInput, bool defaultValue) {
-  int intDefaultValue = (defaultValue) ? 100 : 0;
-  int ch = IBus.readChannel(channelInput);
-  if (ch < 100) return intDefaultValue;
-  return (ch > 50);
+  uint16_t ch = IBus.readChannel(channelInput);
+  if (ch < 100) return defaultValue; // no signal
+
+  const int ON_THRESHOLD = NEUTRAL_SIGNAL + 100;  // e.g. >1600 => ON
+  const int OFF_THRESHOLD = NEUTRAL_SIGNAL - 100; // e.g. <1400 => OFF
+
+  if (ch > ON_THRESHOLD) return true;
+  if (ch < OFF_THRESHOLD) return false;
+  // In the deadband around neutral, return the default or previous state.
+  return defaultValue;
 }
 
 int readChannel(byte channelInput, int minLimit, int maxLimit, int defaultValue) {
@@ -104,12 +115,18 @@ int applyDeadband(int value) {
   return value;
 }
 
+inline void ensureServosAttached() {
+  if (!leftThruster.attached())  leftThruster.attach(LEFT_THRUSTER_PIN);
+  if (!rightThruster.attached()) rightThruster.attach(RIGHT_THRUSTER_PIN);
+}
+
 // ================= micro-ROS Callbacks =================
 void actuator_callback(const void * msgin) {
   const interfaces__msg__Actuator * msg = (const interfaces__msg__Actuator *)msgin;
   last_actuator_msg = *msg;
   actuator_msg_received = true;
   last_actuator_msg_time = millis();   // record reception time
+  SerialUSB.println("Actuator message received");
 }
 
 void heartbeat_callback(const void * msgin) {
@@ -120,33 +137,69 @@ void heartbeat_callback(const void * msgin) {
 
 // ================= micro-ROS (create/destroy) =================
 bool create_microros_entities() {
+  rcl_ret_t rc;
   allocator = rcl_get_default_allocator();
 
-  if (rclc_support_init(&support, 0, NULL, &allocator) != RCL_RET_OK) return false;
+  rc = rclc_support_init(&support, 0, NULL, &allocator);
+  if (rc != RCL_RET_OK) {
+    SerialUSB.print("support init failed: "); SerialUSB.println(rc);
+    return false;
+  }
 
-  if (rclc_node_init_default(&node, "thruster_node", "", &support) != RCL_RET_OK) return false;
+  rc = rclc_node_init_default(&node, "thruster_node", "", &support);
+  if (rc != RCL_RET_OK) {
+    SerialUSB.print("node init failed: "); SerialUSB.println(rc);
+    return false;
+  }
 
-  if (rclc_subscription_init_default(
+  rc = rclc_subscription_init_default(
         &actuator_sub, &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(interfaces, msg, Actuator),
-        "actuator_cmd") != RCL_RET_OK) return false;
+        "actuator_cmd");
+  if (rc != RCL_RET_OK) {
+    SerialUSB.print("actuator_sub init failed: "); SerialUSB.println(rc);
+    return false;
+  }
 
-  if (rclc_subscription_init_default(
+  rc = rclc_subscription_init_default(
         &heartbeat_sub, &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Bool),
-        "heartbeat") != RCL_RET_OK) return false;
+        "heartbeat");
+  if (rc != RCL_RET_OK) {
+    SerialUSB.print("heartbeat_sub init failed: "); SerialUSB.println(rc);
+    return false;
+  }
 
-  if (rclc_publisher_init_default(
+  rc = rclc_publisher_init_default(
         &actuator_pub, &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(interfaces, msg, Actuator),
-        "actuator_feedback") != RCL_RET_OK) return false;
+        "actuator_feedback");
+  if (rc != RCL_RET_OK) {
+    SerialUSB.print("actuator_pub init failed: "); SerialUSB.println(rc);
+    return false;
+  }
 
-  if (rclc_executor_init(&executor, &support.context, 2, &allocator) != RCL_RET_OK) return false;
-  rclc_executor_add_subscription(&executor, &actuator_sub, &last_actuator_msg, &actuator_callback, ON_NEW_DATA);
-  rclc_executor_add_subscription(&executor, &heartbeat_sub, &last_heartbeat_msg, &heartbeat_callback, ON_NEW_DATA);
+  rc = rclc_executor_init(&executor, &support.context, 2, &allocator);
+  if (rc != RCL_RET_OK) {
+    SerialUSB.print("executor init failed: "); SerialUSB.println(rc);
+    return false;
+  }
+
+  // IMPORTANT: pass NULL so executor allocates the incoming message storage
+  rc = rclc_executor_add_subscription(&executor, &actuator_sub, &last_actuator_msg, &actuator_callback, ON_NEW_DATA);
+  if (rc != RCL_RET_OK) {
+    SerialUSB.print("add_sub actuator failed: "); SerialUSB.println(rc);
+    return false;
+  }
+  rc = rclc_executor_add_subscription(&executor, &heartbeat_sub, &last_heartbeat_msg, &heartbeat_callback, ON_NEW_DATA);
+  if (rc != RCL_RET_OK) {
+    SerialUSB.print("add_sub heartbeat failed: "); SerialUSB.println(rc);
+    return false;
+  }
 
   mr_connected = true;
-  digitalWrite(LED_PIN, HIGH);   // connected indicator
+  digitalWrite(LED_PIN, HIGH);
+  SerialUSB.println("microros entities created OK");
   return true;
 }
 
@@ -164,7 +217,7 @@ void destroy_microros_entities() {
 // ================= Setup =================
 void setup() {
   // Debug/aux UARTs (optional)
-  Serial1.begin(115200);       // your debug prints if needed
+  SerialUSB.begin(115200);       // your debug prints if needed
   Serial2.begin(115200);       // FlySky iBUS RX
   IBus.begin(Serial2);
 
@@ -189,6 +242,12 @@ void setup() {
   feedback_msg.actuator_values.data = actuator_values_buffer;
   feedback_msg.actuator_values.size = 2;
   feedback_msg.actuator_values.capacity = 2;
+
+
+  feedback_msg.header.stamp.sec = 0;
+  feedback_msg.header.stamp.nanosec = 0;
+  // frame_id already set/left empty as per A
+
 
   feedback_msg.actuator_names.data = actuator_names_buffer;
   feedback_msg.actuator_names.size = 2;
@@ -221,6 +280,8 @@ void Rf_control() {
     heartbeatStage_rf = (heartbeatStage_rf + 1) % 2;
   }
 
+  ensureServosAttached();
+
   int servoA_int = NEUTRAL_SIGNAL;
   int servoB_int = NEUTRAL_SIGNAL;
 
@@ -229,23 +290,21 @@ void Rf_control() {
   double th_port_norm = 0.0;
 
   int Ch2val = readChannel(THROTTLE_CH, MAX_REVERSE, MAX_FORWARD, NEUTRAL_SIGNAL);
-  int Ch4val = readChannel(IPR_CH,      MAX_REVERSE, MAX_FORWARD, NEUTRAL_SIGNAL);
+  int Ch1val = readChannel(STEERING_CH, MAX_REVERSE, MAX_FORWARD, NEUTRAL_SIGNAL);
 
   // Apply deadband properly (overwrite value, not boolean-test)
   Ch2val = applyDeadband(Ch2val);
-  Ch4val = applyDeadband(Ch4val);
+  Ch1val = applyDeadband(Ch1val);
 
-  if (Ch2val != NEUTRAL_SIGNAL) {
-    float steering = (Ch4val - NEUTRAL_SIGNAL) / (float)(MAX_FORWARD - NEUTRAL_SIGNAL);
-    int   throttle_pwm = Ch2val;
+  float steering = (Ch1val - NEUTRAL_SIGNAL) / (float)(MAX_FORWARD - NEUTRAL_SIGNAL);
+  int   throttle_pwm = Ch2val;
 
-    float turn_radius = 0.5f;
-    int radius_val = (int)(turn_radius * (MAX_FORWARD_AUTO - NEUTRAL_SIGNAL));
-    int steer_pwm  = (int)(steering * radius_val);
+  float turn_radius = 0.75f;
+  int radius_val = (int)(turn_radius * (MAX_FORWARD_AUTO - NEUTRAL_SIGNAL));
+  int steer_pwm  = (int)(steering * radius_val);
 
-    servoA_int = constrain(throttle_pwm + steer_pwm, MAX_REVERSE_AUTO - radius_val, MAX_FORWARD_AUTO + radius_val);
-    servoB_int = constrain(throttle_pwm - steer_pwm, MAX_REVERSE_AUTO - radius_val, MAX_FORWARD_AUTO + radius_val);
-  }
+  servoA_int = constrain(throttle_pwm + steer_pwm, MAX_REVERSE_AUTO - radius_val, MAX_FORWARD_AUTO + radius_val);
+  servoB_int = constrain(throttle_pwm - steer_pwm, MAX_REVERSE_AUTO - radius_val, MAX_FORWARD_AUTO + radius_val);
 
   leftThruster.writeMicroseconds(servoB_int);
   rightThruster.writeMicroseconds(servoA_int);
@@ -268,7 +327,7 @@ void Rf_control() {
     // light spin so callbacks (e.g., heartbeat) still run in RF
     rclc_executor_spin_some(&executor, RCL_MS_TO_NS(1));
   }
-  // Serial1.println("RF Control Active");
+  SerialUSB.println("RF Control Active");
 }
 
 // ================= AUTO Mode =================
@@ -277,6 +336,18 @@ void autoControl() {
     rclc_executor_spin_some(&executor, RCL_MS_TO_NS(10));
   }
 
+  unsigned long currentTime = millis();
+
+  if ((heartbeatStage_auto == 0 && currentTime - lastRelayToggle_auto >= 200) ||
+      (heartbeatStage_auto == 1 && currentTime - lastRelayToggle_auto >= 200)) {
+    relayState_rf = !relayState_rf;
+    digitalWrite(RELAY_PIN, relayState_rf);
+    lastRelayToggle_auto = currentTime;
+    heartbeatStage_auto = (heartbeatStage_auto + 1) % 2;
+  }
+  
+  ensureServosAttached();
+  
   static double th_stbd_norm = 0.0;
   static double th_port_norm = 0.0;
 
@@ -287,6 +358,12 @@ void autoControl() {
     th_port_norm = 0.0;
 
     for (size_t i = 0; i < last_actuator_msg.actuator_names.size; i++) {
+      
+      SerialUSB.print("Actuator: ");
+      SerialUSB.print(last_actuator_msg.actuator_names.data[i].data);
+      SerialUSB.print(" Value: ");
+      SerialUSB.println(last_actuator_msg.actuator_values.data[i]);
+
       const char *name = last_actuator_msg.actuator_names.data[i].data;
       double value = last_actuator_msg.actuator_values.data[i];
       if (strcmp(name, "th_stbd") == 0) {
@@ -325,7 +402,7 @@ void autoControl() {
     feedback_msg.header.stamp.nanosec = (millis() % 1000) * 1000000;
     rcl_publish(&actuator_pub, &feedback_msg, NULL);
   }
-  // Serial1.println("Auto Control Active");
+  SerialUSB.println("Auto Control Active");
 }
 
 // ================= Loop =================
