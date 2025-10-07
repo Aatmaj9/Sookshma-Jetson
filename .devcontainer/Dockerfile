@@ -32,7 +32,7 @@ RUN apt-get -y install libboost-all-dev libasio-dev
 # ------------------------------------------ System deps & ROS 2 packages in one layer ------------------------------
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential gcc gfortran git \
-      libsm6 libxext6 libxrender1 libfontconfig1 libgl1 libboost-all-dev libasio-dev gdebi-core \
+      libsm6 libxext6 libxrender1 libfontconfig1 libgl1 libboost-all-dev libasio-dev libopencv-dev gdebi-core \
       ros-humble-diagnostic-updater \
       ros-humble-nmea-msgs \
       ros-humble-rtcm-msgs \
@@ -55,6 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ros-humble-point-cloud-transport \
       ros-humble-robot-localization \
       ros-humble-backward-ros \
+      python3-opencv \
     && ln -sf /usr/bin/python3 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 
@@ -82,7 +83,7 @@ USER ${USERNAME}
 WORKDIR /home/${USERNAME}
 
 # --- Python deps from requirements.txt -----
-RUN python3 -m venv /home/${USERNAME}/.venv
+RUN python3 -m venv --system-site-packages /home/${USERNAME}/.venv
 ENV VIRTUAL_ENV=/home/${USERNAME}/.venv
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
