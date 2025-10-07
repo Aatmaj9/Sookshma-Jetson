@@ -1,6 +1,6 @@
 services:
   sookshma:
-    image: aatmaj9/sookshma-jetson:2.0
+    image: aatmaj9/sookshma-jetson:3.0
     build:
       context: .
       dockerfile: Dockerfile

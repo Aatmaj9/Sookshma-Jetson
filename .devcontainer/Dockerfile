@@ -63,7 +63,7 @@ ENV USERNAME=${USERNAME}
 RUN useradd -m "${USERNAME}" \
  && echo "${USERNAME}:${USERNAME}" | chpasswd \
  && usermod --shell /bin/bash "${USERNAME}" \
- && usermod -aG sudo,dialout,video,plugdev "${USERNAME}" \
+ && usermod -aG sudo,dialout,video,plugdev,zed "${USERNAME}" \
  && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} \
  && chmod 0440 /etc/sudoers.d/${USERNAME}
 
