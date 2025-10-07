@@ -1,4 +1,5 @@
 cd ./ros2_ws
-colcon build --symlink-install
+sudo rm -rf build log install
+colcon build --symlink-install --cmake-args=-DCMAKE_BUILD_TYPE=Release --parallel-workers $(nproc)
 sros2
 cd -
