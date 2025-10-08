@@ -33,6 +33,7 @@ RUN apt-get update && apt-get install -y software-properties-common \
       ros-humble-rtcm-msgs \
       ros-humble-rviz2 \
       ros-humble-rosbridge-server \
+      ros-humble-rosx-introspection \
       ros-humble-foxglove-bridge \
       ros-humble-image-transport-plugins \
       ros-humble-compressed-image-transport \
