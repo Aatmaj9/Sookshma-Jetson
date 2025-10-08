@@ -27,12 +27,13 @@ RUN apt-get update && apt-get install -y software-properties-common \
       sudo xauth htop udev zip unzip curl \
       libboost-all-dev libasio-dev \
       build-essential gcc gfortran git \
-      libsm6 libxext6 libxrender1 libfontconfig1 libgl1 libopencv-dev gdebi-core \
+      libsm6 libxext6 libxrender1 libfontconfig1 libgl1 libpcl-dev libpcap-dev libopencv-dev libyaml-cpp-dev libeigen3-dev gdebi-core \
       ros-humble-diagnostic-updater \
       ros-humble-nmea-msgs \
       ros-humble-rtcm-msgs \
       ros-humble-rviz2 \
       ros-humble-rosbridge-server \
+      ros-humble-foxglove-bridge \
       ros-humble-image-transport-plugins \
       ros-humble-compressed-image-transport \
       ros-humble-compressed-depth-image-transport \
@@ -48,6 +49,7 @@ RUN apt-get update && apt-get install -y software-properties-common \
       ros-humble-geographic-msgs \
       ros-humble-image-transport \
       ros-humble-point-cloud-transport \
+      ros-humble-pcl-conversions \
       ros-humble-robot-localization \
       ros-humble-backward-ros \
       python3-opencv \
