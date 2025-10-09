@@ -1,6 +1,6 @@
 services:
   sookshma:
-    image: aatmaj9/sookshma-jetson:4.0
+    image: aatmaj9/sookshma-jetson:5.0
     build:
       context: .
       dockerfile: Dockerfile
@@ -11,6 +11,7 @@ services:
     volumes:
       - ..:/workspaces/mavlab
       - /dev:/dev
+      - /tmp/.X11-unix/:/tmp/.X11-unix \
       - /tmp/argus_socket:/tmp/argus_socket     
       - /dev/bus/usb:/dev/bus/usb
       - /dev/video0:/dev/video0
@@ -36,5 +37,5 @@ services:
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=all
-      - DISPLAY=
+      - DISPLAY= $DISPLAY
 
