@@ -41,46 +41,39 @@ class VideoSaver(Node):
         self.bridge = CvBridge()
         self.save_dir = Path(save_dir); self.save_dir.mkdir(parents=True, exist_ok=True)
         self.create_subscription(Image, TOPIC, self.cb, qos_profile_sensor_data)
-        self.latest = None
         self.recording = False
         self.start_t = 0.0
         self.writer = None
-        print("Press 'V' to record 10s video, Ctrl+C to exit")
+        print("Press 'V' to record , Ctrl+C to exit")
 
     def cb(self, msg):
         frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-        self.latest = frame
+
         if self.recording:
-            if time.monotonic() - self.start_t > DURATION_SEC:
-                self.stop_recording()
-                print("video captured")
-                return
+            if self.writer is None:
+                h, w = frame.shape[:2]
+                name = datetime.now().strftime("%Y%m%d_%H%M%S") + ".avi"
+                fourcc = cv2.VideoWriter_fourcc(*"MJPG")
+                self.path = str(self.save_dir / name)
+                self.writer = cv2.VideoWriter(self.path, fourcc, ASSUMED_FPS, (w, h))
+                self.start_t = time.monotonic()
+                print("Capture started, wait 10 secs")
+
             self.writer.write(frame)
 
-    def start_recording(self):
-        if self.latest is None or self.recording:
-            return
-        name = datetime.now().strftime("%Y%m%d_%H%M%S") + ".avi"
-        path = str(self.save_dir / name)
-        h, w = self.latest.shape[:2]
-        fourcc = cv2.VideoWriter_fourcc(*"MJPG")
-        self.writer = cv2.VideoWriter(path, fourcc, ASSUMED_FPS, (w, h))
-        self.start_t = time.monotonic()
-        self.recording = True
-
-    def stop_recording(self):
-        if self.writer is not None:
-            self.writer.release()
-            self.writer = None
-        self.recording = False
+            if time.monotonic() - self.start_t >= DURATION_SEC:
+                self.writer.release()
+                self.writer = None
+                self.recording = False
+                print("video captured")
 
     def run(self):
         while rclpy.ok():
             rclpy.spin_once(self, timeout_sec=0.05)
             k = get_key()
             if k in ('v', 'V'):
-                if self.latest is not None:
-                    self.start_recording()
+                if not self.recording:
+                    self.recording = True
             elif k in ('\x03', '\x04'):
                 break
 
@@ -95,7 +88,8 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        node.stop_recording()
+        if node.writer is not None:
+            node.writer.release()
         if fd is not None and old is not None:
             restore_tty(fd, old)
         try:
