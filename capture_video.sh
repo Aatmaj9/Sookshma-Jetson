@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-BAGS_DIR="./bags/images"
+BAGS_DIR="./bags/videos"
 SCRIPT="./zed2i/capture_image.py"
 
 mkdir -p "$BAGS_DIR"
