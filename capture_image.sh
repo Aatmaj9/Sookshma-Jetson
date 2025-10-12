@@ -14,6 +14,6 @@ done
 SAVE_DIR="$BAGS_DIR/test$n"
 mkdir -p "$SAVE_DIR"
 
-echo "🟢 Starting new capture session in: $SAVE_DIR"
+echo "🟢 Starting new image capture session in: $SAVE_DIR"
 
 python3 "$SCRIPT" "$SAVE_DIR"
