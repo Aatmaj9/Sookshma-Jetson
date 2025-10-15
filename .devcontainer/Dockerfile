@@ -53,6 +53,15 @@ RUN apt-get update && apt-get install -y software-properties-common \
       ros-humble-pcl-conversions \
       ros-humble-robot-localization \
       ros-humble-backward-ros \
+      ros-humble-velodyne \
+      ros-humble-velodyne-driver \
+      ros-humble-velodyne-pointcloud \
+      ros-humble-tf2-ros \
+      ros-humble-tf2-geometry-msgs \
+      ros-humble-message-filters \
+      ros-humble-camera-info-manager \
+      ros-humble-pointcloud-to-laserscan \
+      ros-humble-laser-filters \
       python3-opencv \
       gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi bossa-cli \
       python3-numpy python3-scipy \
