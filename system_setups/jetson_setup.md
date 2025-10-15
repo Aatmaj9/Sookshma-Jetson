@@ -52,7 +52,7 @@ nmcli device status
 sudo nmcli con add type ethernet ifname eno1 con-name velodyne ipv4.addresses 192.168.3.100/24 ipv4.method manual autoconnect yes
 ```
 
-In nmcli connection show you should see velodyne listed
+In nmcli connection show you should see velodyne listed.
 
 ```
 sudo nmcli con up velodyne
