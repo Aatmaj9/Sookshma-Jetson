@@ -70,4 +70,4 @@ network:
         "mavlab":
           password: "mavlab24"
 ```
-    
+sudo netplan apply

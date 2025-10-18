@@ -1,6 +1,7 @@
 services:
   sookshma:
     image: aatmaj9/sookshma-jetson:9.0
+    restart: unless-stopped
     build:
       context: .
       dockerfile: Dockerfile
