@@ -131,7 +131,8 @@ RUN echo 'source /opt/ros/humble/setup.bash' >> /home/${USERNAME}/.bashrc \
  && echo 'if [ -f /workspaces/mavlab/ros2_ws/install/setup.bash ]; then source /workspaces/mavlab/ros2_ws/install/setup.bash; fi' >> /home/${USERNAME}/.bashrc \
  && echo "alias sros2='source /opt/ros/humble/setup.bash && if [ -f /workspaces/mavlab/ros2_ws/install/setup.bash ]; then source /workspaces/mavlab/ros2_ws/install/setup.bash; fi'" >> /home/${USERNAME}/.bashrc \
  && echo "alias colb='sudo rm -rf build log install && colcon build --symlink-install --cmake-args=-DCMAKE_BUILD_TYPE=Release --parallel-workers \$(nproc) && sros2'" >> /home/${USERNAME}/.bashrc \
- && echo "alias udev='sudo cp 99-usb-serial.rules /etc/udev/rules.d/99-usb-serial.rules && sudo udevadm control --reload-rules && sudo udevadm trigger'" >> /home/${USERNAME}/.bashrc
+ && echo "alias topics='ros2 topic list'" >> /home/${USERNAME}/.bashrc \
+ && echo "alias nodes='ros2 node list'" >> /home/${USERNAME}/.bashrc
 
 RUN echo "alias sbg='sros2 && ros2 launch sbg_driver sbg_device_launch.py'" >> /home/${USERNAME}/.bashrc \
  && echo "alias gnc='sros2 && ros2 run gnc gnc'" >> /home/${USERNAME}/.bashrc \

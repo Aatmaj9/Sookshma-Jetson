@@ -1,3 +1,5 @@
+source udev.sh
+
 docker run -d --privileged --rm \
     --name microros_agent \
     --net=host \
@@ -8,3 +10,4 @@ docker run -d --privileged --rm \
 
 docker compose -f .devcontainer/docker-compose.yml up -d
 docker exec -it sookshma_dev bash
+
