@@ -1,3 +1,4 @@
 source udev.sh
-source mros.sh
-docker exec -it sookshma_dev bash -lc "zed & velodyne & exec bash"
+# source mros.sh
+docker exec -d sookshma_dev bash -ic 'source ~/.bashrc; zed & velodyne &'
+docker exec -it sookshma_dev bash
