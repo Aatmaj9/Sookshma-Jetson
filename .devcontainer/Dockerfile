@@ -1,6 +1,9 @@
 # Base: ZED SDK 5.0 for JetPack 6.2.1 (L4T r36.4)
 FROM stereolabs/zed:5.0-tools-devel-l4t-r36.4
 
+ENV DEBIAN_FRONTEND=noninteractive
+SHELL ["/bin/bash", "-c"]
+
 # -------------------- ROS 2 Humble + Base Deps --------------------
 RUN apt-get update && apt-get install -y curl gnupg2 lsb-release \
  && curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
@@ -23,11 +26,13 @@ RUN apt-get update && apt-get install -y curl gnupg2 lsb-release \
 RUN apt-get update && apt-get install -y software-properties-common \
  && apt-add-repository -y universe && apt-get update \
  && apt-get install -y --no-install-recommends \
-      python3-pip python3-serial python3-venv \
-      sudo xauth htop udev zip unzip curl \
+      python3-pip python3-serial python3-opencv \
+      sudo xauth htop udev zip unzip git \
       libboost-all-dev libasio-dev \
-      build-essential gcc gfortran git \
-      libsm6 libxext6 libxrender1 libfontconfig1 libgl1 libpcl-dev libpcap-dev libopencv-dev libyaml-cpp-dev libeigen3-dev gdebi-core \
+      v4l-utils \
+      libsm6 libxext6 libxrender1 libfontconfig1 libgl1 \
+      libpcap-dev libopencv-dev libyaml-cpp-dev libeigen3-dev \
+      libopenblas-dev libopenblas-base \
       ros-humble-diagnostic-updater \
       ros-humble-nmea-msgs \
       ros-humble-rtcm-msgs \
@@ -62,11 +67,9 @@ RUN apt-get update && apt-get install -y software-properties-common \
       ros-humble-camera-info-manager \
       ros-humble-pointcloud-to-laserscan \
       ros-humble-laser-filters \
-      python3-opencv \
-      gcc-arm-none-eabi binutils-arm-none-eabi libnewlib-arm-none-eabi bossa-cli \
-      python3-numpy python3-scipy \
+      ros-humble-v4l2-camera \
+      ros-humble-rmw-cyclonedds-cpp \
  && ln -sf /usr/bin/python3 /usr/bin/python \
- && chmod -R a+rX /usr/local/lib/python3.10/dist-packages /usr/lib/python3/dist-packages \
  && rm -rf /var/lib/apt/lists/*
 
 # -------------------- Create non-root user --------------------
@@ -79,67 +82,99 @@ RUN useradd -m "${USERNAME}" \
  && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} \
  && chmod 0440 /etc/sudoers.d/${USERNAME}
 
-# -------------------- Python venv + pip packages --------------------
 USER ${USERNAME}
 WORKDIR /home/${USERNAME}
-RUN python3 -m venv --system-site-packages /home/${USERNAME}/.venv
-ENV VIRTUAL_ENV=/home/${USERNAME}/.venv
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-COPY --chown=${USERNAME}:${USERNAME} requirements.txt /home/${USERNAME}/requirements.txt
-RUN python3 -m pip install --upgrade pip setuptools wheel \
- && python3 -m pip install --no-cache-dir -r /home/${USERNAME}/requirements.txt
-RUN echo 'source $VIRTUAL_ENV/bin/activate' >> ~/.bashrc
 
-# -------------------- Arduino CLI + micro-ROS setup --------------------
+# -------------------- Python Dependencies --------------------
+COPY --chown=${USERNAME}:${USERNAME} requirements.txt /home/${USERNAME}/requirements.txt
+
+RUN pip3 install --upgrade pip \
+ && pip3 install --no-cache-dir -r requirements.txt \
+ && pip3 install --no-cache-dir --no-deps ultralytics
+
+# -------------------- Arduino CLI setup --------------------
 RUN curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
 ENV PATH="/home/${USERNAME}/bin:${PATH}"
 ENV ARDUINO_DATA="/home/${USERNAME}/.arduino15"
+
 RUN arduino-cli config init \
  && arduino-cli config set directories.data "${ARDUINO_DATA}" \
  && arduino-cli core update-index \
+ && arduino-cli core install arduino:mbed_portenta \
+ && arduino-cli lib install Servo \
  && arduino-cli cache clean
 
-RUN arduino-cli core update-index \
- && arduino-cli cache clean \
- && arduino-cli core update-index --additional-urls https://per1234.github.io/ArduinoCore-sam/package_per1234_samarm64_index.json \
- && export ARDUINO_BOARD_MANAGER_ADDITIONAL_URLS=https://per1234.github.io/ArduinoCore-sam/package_per1234_samarm64_index.json \
- && arduino-cli core install per1234:sam \
- && SAM_ARM_PATH="/home/${USERNAME}/.arduino15/packages/per1234/hardware/sam/1.6.11-arm64" \
- && curl -fsSL https://raw.githubusercontent.com/micro-ROS/micro_ros_arduino/main/extras/patching_boards/platform_arduinocore_sam.txt -o ${SAM_ARM_PATH}/platform.txt \
- && sed -i 's/-4.8.3-2014q1././g' ${SAM_ARM_PATH}/platform.txt \
- && arduino-cli lib install Servo \
- && git clone --depth=1 https://gitlab.com/timwilkinson/FlySkyIBus.git /home/${USERNAME}/Arduino/libraries/FlySkyIBus
-
-COPY --chown=${USERNAME}:${USERNAME} micro_ros_arduino_arm.zip /tmp/micro_ros_arduino.zip
+# -------------------- Arduino Libraries --------------------
+COPY --chown=${USERNAME}:${USERNAME} micro_ros_arduino.zip /tmp/micro_ros_arduino.zip
 RUN printf "board_manager:\n  additional_urls: []\n\nlibrary:\n  enable_unsafe_install: true\n" > /home/${USERNAME}/.arduino15/arduino-cli.yaml \
  && arduino-cli --config-file /home/${USERNAME}/.arduino15/arduino-cli.yaml lib install --zip-path /tmp/micro_ros_arduino.zip \
  && rm /tmp/micro_ros_arduino.zip
 
-# -------------------- Node.js via NVM + localtunnel --------------------
-ENV NVM_DIR="/home/${USERNAME}/.nvm"
-ENV NODE_VERSION="20.17.0"
-RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash \
- && . "$NVM_DIR/nvm.sh" \
- && nvm install $NODE_VERSION \
- && nvm alias default $NODE_VERSION \
- && nvm use default \
- && npm install -g npm@latest localtunnel
-ENV PATH="${NVM_DIR}/versions/node/v${NODE_VERSION}/bin:${PATH}"
+COPY --chown=${USERNAME}:${USERNAME} FlySkyIBus_modified_portenta.zip /tmp/FlySkyIBus.zip
+RUN arduino-cli --config-file /home/${USERNAME}/.arduino15/arduino-cli.yaml lib install --zip-path /tmp/FlySkyIBus.zip \
+ && rm /tmp/FlySkyIBus.zip
+
+COPY --chown=${USERNAME}:${USERNAME} BlueRobotics_MS5837.zip /tmp/BlueRobotics_MS5837.zip
+RUN arduino-cli --config-file /home/${USERNAME}/.arduino15/arduino-cli.yaml lib install --zip-path /tmp/BlueRobotics_MS5837.zip \
+ && rm /tmp/BlueRobotics_MS5837.zip
+
+ # -------------------- ROS Workspace --------------------
+COPY --chown=${USERNAME}:${USERNAME} packages /home/${USERNAME}/ros2_ws/src
+
+RUN rm -rf /home/${USERNAME}/ros2_ws/src/zed-ros2-wrapper
+
+USER root
+WORKDIR /home/${USERNAME}/ros2_ws
+
+RUN apt-get update && \
+    rosdep update && \
+    rosdep install --from-paths src --ignore-src -r -y
+
+    # -------------------- Install local ping-python --------------------
+USER root
+
+# 1. CLEAN BEFORE: Remove broken library and scripts
+RUN rm -rf /usr/local/lib/python3.10/dist-packages/brping* \
+    && rm -rf /usr/local/lib/python3.10/dist-packages/bluerobotics_ping* \
+    && rm -f /usr/local/bin/pingproxy.py \
+    && rm -f /usr/local/bin/ping1d-simulation.py
+
+# 2. INSTALL: Create fresh 0.1.5 versions
+WORKDIR /home/${USERNAME}/ros2_ws/src/ping_sonar_ros/ping_sonar_ros/ping-python
+RUN python3 setup.py install
+
+# -------------------- Build Workspace --------------------
+WORKDIR /home/${USERNAME}/ros2_ws
+RUN bash -c "source /opt/ros/humble/setup.bash && \
+             colcon build --cmake-args=-DCMAKE_BUILD_TYPE=Release --parallel-workers $(nproc)"
+
+# 3. Fix permissions for the mavlab user
+RUN chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}/ros2_ws/install
+
+USER ${USERNAME}
 
 # -------------------- ROS 2 bashrc + aliases --------------------
+
 RUN echo 'source /opt/ros/humble/setup.bash' >> /home/${USERNAME}/.bashrc \
- && echo 'if [ -f /workspaces/mavlab/ros2_ws/install/setup.bash ]; then source /workspaces/mavlab/ros2_ws/install/setup.bash; fi' >> /home/${USERNAME}/.bashrc \
- && echo "alias sros2='source /opt/ros/humble/setup.bash && if [ -f /workspaces/mavlab/ros2_ws/install/setup.bash ]; then source /workspaces/mavlab/ros2_ws/install/setup.bash; fi'" >> /home/${USERNAME}/.bashrc \
- && echo "alias colb='pushd ~/ros2_ws >/dev/null && sudo rm -rf build log install && colcon build --symlink-install --cmake-args=-DCMAKE_BUILD_TYPE=Release --parallel-workers \$(nproc) && sros2 && popd >/dev/null'" >> /home/${USERNAME}/.bashrc \
+ && echo 'if [ -f /home/mavlab/ros2_ws/install/setup.bash ]; then source /home/mavlab/ros2_ws/install/setup.bash; fi' >> /home/${USERNAME}/.bashrc \
+ && echo 'if [ -f /workspaces/mavlab/code_ws/install/setup.bash ]; then source /workspaces/mavlab/code_ws/install/setup.bash; fi' >> /home/${USERNAME}/.bashrc \
+ && echo "alias sros2='source /opt/ros/humble/setup.bash && source /home/mavlab/ros2_ws/install/setup.bash'" >> /home/${USERNAME}/.bashrc \
+ && echo "alias scode='source /opt/ros/humble/setup.bash && source /workspaces/mavlab/code_ws/install/setup.bash'" >> /home/${USERNAME}/.bashrc \
+ && echo "alias colb='pushd /workspaces/mavlab/code_ws >/dev/null && sudo rm -rf build log install && colcon build --symlink-install --cmake-args=-DCMAKE_BUILD_TYPE=Release --parallel-workers \$(nproc) && sros2 && popd >/dev/null'" >> /home/${USERNAME}/.bashrc \
  && echo "alias topics='ros2 topic list'" >> /home/${USERNAME}/.bashrc \
  && echo "alias nodes='ros2 node list'" >> /home/${USERNAME}/.bashrc
 
 RUN echo "alias sbg='sros2 && ros2 launch sbg_driver sbg_device_launch.py'" >> /home/${USERNAME}/.bashrc \
  && echo "alias gnc='sros2 && ros2 run gnc gnc'" >> /home/${USERNAME}/.bashrc \
+ && echo "alias dvl='sros2 && ros2 launch dvl_a50 dvl_a50.launch.py ip_address:='192.168.194.95''" >> /home/${USERNAME}/.bashrc \
+ && echo "alias ping360='sros2 && ros2 run ping360_sonar ping360.py --ros-args -p device:=/dev/ping360'" >> /home/${USERNAME}/.bashrc \
+ && echo "alias ping2='sros2 && ros2 run ping_sonar_ros ping1d_node --ros-args -p port:=/dev/ping2'" >> /home/${USERNAME}/.bashrc \
+ && echo "alias modem='sros2 && scode && ros2 run modem_m64 modem_node --ros-args -r __ns:=/auv -p role:=b -p port:=/dev/modem'" >> /home/${USERNAME}/.bashrc \
  && echo "alias uwb='sros2 && ros2 run uwb_driver uwb'" >> /home/${USERNAME}/.bashrc \
  && echo "alias mavsim='sros2 && ros2 run mav_simulator simulate'" >> /home/${USERNAME}/.bashrc \
  && echo "alias ardusimple='sros2 && ros2 launch ublox_gps ublox_gps_node-launch.py'" >> /home/${USERNAME}/.bashrc \
  && echo "alias zed='sros2 && ros2 launch zed_wrapper zed_camera.launch.py camera_model:=zed2i'" >> /home/${USERNAME}/.bashrc \
  && echo "alias velodyne='sros2 && ros2 launch velodyne velodyne-all-nodes-VLP16-launch.py'" >> /home/${USERNAME}/.bashrc
 
+# -------------------- Expose Ports --------------------
 EXPOSE 9000 9001 9002 9003
